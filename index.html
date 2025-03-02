@@ -75,6 +75,7 @@
             display: flex;
             gap: 10px;
             align-items: center;
+            flex-wrap: wrap;
         }
         
         .deadline-label {
@@ -82,15 +83,16 @@
             color: #555;
         }
         
-        #deadline-date {
+        #deadline-date, .deadline-date-edit {
             flex: 1;
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
+            min-width: 140px;
         }
         
-        #deadline-time {
+        #deadline-time, .deadline-time-edit {
             width: 120px;
             padding: 8px;
             border: 1px solid #ddd;
@@ -107,20 +109,14 @@
             flex-direction: column;
             padding: 12px;
             background-color: #f9f9f9;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             border-radius: 4px;
-            cursor: move;
             transition: transform 0.2s, box-shadow 0.2s;
             border-left: 4px solid #4caf50;
         }
         
         .task-item:hover {
             background-color: #f0f0f0;
-        }
-        
-        .task-item.dragging {
-            opacity: 0.5;
-            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.15);
         }
         
         .task-item.completed {
@@ -135,6 +131,12 @@
         .task-main {
             display: flex;
             align-items: center;
+        }
+        
+        .task-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
         }
         
         .task-checkbox {
@@ -185,26 +187,59 @@
             font-weight: bold;
         }
         
-        .delete-task {
-            color: #e74c3c;
+        .btn {
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 18px;
-            opacity: 0.7;
             transition: opacity 0.3s;
-            margin-left: 10px;
-        }
-        
-        .delete-task:hover {
-            opacity: 1;
-        }
-        
-        .drag-handle {
-            cursor: grab;
-            padding: 0 10px 0 0;
-            color: #aaa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 16px;
+            padding: 4px;
+            border-radius: 4px;
+        }
+        
+        .btn:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-delete {
+            color: #e74c3c;
+        }
+        
+        .btn-edit {
+            color: #2196F3;
+        }
+        
+        .btn-move {
+            color: #888;
+            cursor: move;
+            touch-action: none; /* For mobile */
+        }
+        
+        .btn-save {
+            color: #4caf50;
+            margin-left: auto;
+        }
+        
+        .btn-cancel {
+            color: #888;
+        }
+        
+        .deadline-edit-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #eee;
+        }
+        
+        .deadline-edit-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
         }
         
         .empty-message {
@@ -219,6 +254,26 @@
             text-align: center;
             font-size: 14px;
             color: #777;
+            line-height: 1.5;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            .deadline-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            #deadline-date, .deadline-date-edit,
+            #deadline-time, .deadline-time-edit {
+                width: 100%;
+                flex: none;
+            }
+            
+            .task-meta {
+                flex-direction: column;
+                gap: 2px;
+            }
         }
     </style>
 </head>
@@ -240,7 +295,11 @@
         
         <ul id="task-list" class="task-list"></ul>
         
-        <p class="info">Drag and drop to reorder tasks. Click on a task to mark it as completed.</p>
+        <p class="info">
+            On desktop: Drag and drop to reorder tasks.<br>
+            On mobile: Use the ≡ handle to reorder tasks.<br>
+            Click the pencil icon to edit or add a deadline.
+        </p>
     </div>
     
     <script>
@@ -251,7 +310,16 @@
             const addTaskBtn = document.getElementById('add-task-btn');
             const taskList = document.getElementById('task-list');
             let tasks = [];
+            
+            // For desktop drag and drop
             let draggedItem = null;
+            
+            // For mobile touch events
+            let touchStartIndex = null;
+            let touchStartY = null;
+            let currentTouchItem = null;
+            let itemHeight = 0;
+            let taskElements = [];
             
             // Format date for display
             function formatDate(date) {
@@ -263,6 +331,20 @@
                     minute: '2-digit'
                 };
                 return new Date(date).toLocaleDateString(undefined, options);
+            }
+            
+            // Format date for input
+            function formatDateForInput(dateStr) {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                return date.toISOString().split('T')[0];
+            }
+            
+            // Format time for input
+            function formatTimeForInput(dateStr) {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                return date.toTimeString().substring(0, 5);
             }
             
             // Format time difference
@@ -392,6 +474,96 @@
                 renderTasks();
             }
             
+            // Edit task deadline
+            function editTaskDeadline(id, deadline) {
+                tasks = tasks.map(task => {
+                    if (task.id === id) {
+                        return { 
+                            ...task, 
+                            deadline,
+                            isOverdue: deadline ? new Date() > new Date(deadline) : false
+                        };
+                    }
+                    return task;
+                });
+                
+                saveTasks();
+                renderTasks();
+            }
+            
+            // Show deadline editor
+            function showDeadlineEditor(taskItem, task) {
+                // Check if editor already exists
+                if (taskItem.querySelector('.deadline-edit-container')) {
+                    return;
+                }
+                
+                const deadlineEditor = document.createElement('div');
+                deadlineEditor.className = 'deadline-edit-container';
+                
+                const editorRow = document.createElement('div');
+                editorRow.className = 'deadline-row';
+                
+                const dateLabel = document.createElement('span');
+                dateLabel.className = 'deadline-label';
+                dateLabel.textContent = 'Deadline:';
+                
+                const dateInput = document.createElement('input');
+                dateInput.type = 'date';
+                dateInput.className = 'deadline-date-edit';
+                if (task.deadline) {
+                    dateInput.value = formatDateForInput(task.deadline);
+                }
+                
+                const timeInput = document.createElement('input');
+                timeInput.type = 'time';
+                timeInput.className = 'deadline-time-edit';
+                if (task.deadline) {
+                    timeInput.value = formatTimeForInput(task.deadline);
+                }
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'deadline-edit-actions';
+                
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'btn btn-save';
+                saveBtn.innerHTML = '✓';
+                saveBtn.title = 'Save';
+                
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn btn-cancel';
+                cancelBtn.innerHTML = '✕';
+                cancelBtn.title = 'Cancel';
+                
+                editorRow.appendChild(dateLabel);
+                editorRow.appendChild(dateInput);
+                editorRow.appendChild(timeInput);
+                
+                actionsDiv.appendChild(cancelBtn);
+                actionsDiv.appendChild(saveBtn);
+                
+                deadlineEditor.appendChild(editorRow);
+                deadlineEditor.appendChild(actionsDiv);
+                
+                taskItem.appendChild(deadlineEditor);
+                
+                // Event listeners
+                saveBtn.addEventListener('click', () => {
+                    let deadline = null;
+                    if (dateInput.value) {
+                        const dateValue = dateInput.value;
+                        const timeValue = timeInput.value || '23:59';
+                        deadline = `${dateValue}T${timeValue}`;
+                    }
+                    
+                    editTaskDeadline(task.id, deadline);
+                });
+                
+                cancelBtn.addEventListener('click', () => {
+                    taskItem.removeChild(deadlineEditor);
+                });
+            }
+            
             // Render all tasks
             function renderTasks() {
                 taskList.innerHTML = '';
@@ -404,6 +576,8 @@
                     return;
                 }
                 
+                taskElements = [];
+                
                 tasks.forEach(task => {
                     const taskItem = document.createElement('li');
                     const isTaskOverdue = isOverdue(task);
@@ -415,10 +589,6 @@
                     // Main task content
                     const taskMain = document.createElement('div');
                     taskMain.className = 'task-main';
-                    
-                    const dragHandle = document.createElement('span');
-                    dragHandle.className = 'drag-handle';
-                    dragHandle.innerHTML = '&#8942;';
                     
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
@@ -459,9 +629,24 @@
                         }
                     }
                     
+                    // Action buttons
+                    const taskActions = document.createElement('div');
+                    taskActions.className = 'task-actions';
+                    
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'btn btn-edit';
+                    editBtn.innerHTML = '✎';
+                    editBtn.title = 'Edit Deadline';
+                    
                     const deleteBtn = document.createElement('button');
-                    deleteBtn.className = 'delete-task';
-                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.className = 'btn btn-delete';
+                    deleteBtn.innerHTML = '×';
+                    deleteBtn.title = 'Delete Task';
+                    
+                    const moveBtn = document.createElement('button');
+                    moveBtn.className = 'btn btn-move';
+                    moveBtn.innerHTML = '≡';
+                    moveBtn.title = 'Drag to Reorder';
                     
                     // Assemble the task item
                     taskMeta.appendChild(taskCreated);
@@ -471,13 +656,18 @@
                     taskContent.appendChild(taskText);
                     taskContent.appendChild(taskMeta);
                     
-                    taskMain.appendChild(dragHandle);
+                    taskActions.appendChild(editBtn);
+                    taskActions.appendChild(deleteBtn);
+                    taskActions.appendChild(moveBtn);
+                    
                     taskMain.appendChild(checkbox);
                     taskMain.appendChild(taskContent);
-                    taskMain.appendChild(deleteBtn);
+                    taskMain.appendChild(taskActions);
                     
                     taskItem.appendChild(taskMain);
                     taskList.appendChild(taskItem);
+                    
+                    taskElements.push(taskItem);
                     
                     // Event listeners
                     checkbox.addEventListener('change', () => {
@@ -493,22 +683,111 @@
                         deleteTask(task.id);
                     });
                     
-                    // Drag and drop events
+                    editBtn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        showDeadlineEditor(taskItem, task);
+                    });
+                    
+                    // Desktop Drag and drop events
                     taskItem.addEventListener('dragstart', () => {
                         draggedItem = taskItem;
                         setTimeout(() => {
-                            taskItem.classList.add('dragging');
+                            taskItem.style.opacity = '0.5';
                         }, 0);
                     });
                     
                     taskItem.addEventListener('dragend', () => {
                         draggedItem = null;
-                        taskItem.classList.remove('dragging');
+                        taskItem.style.opacity = '1';
+                    });
+                    
+                    // Mobile touch events for the move button
+                    moveBtn.addEventListener('touchstart', function(e) {
+                        touchStartIndex = taskElements.indexOf(taskItem);
+                        currentTouchItem = taskItem;
+                        touchStartY = e.touches[0].clientY;
+                        itemHeight = taskItem.offsetHeight;
+                        
+                        taskItem.style.transition = 'none';
+                        taskItem.style.zIndex = '1000';
+                        taskItem.style.opacity = '0.8';
+                        
+                        e.preventDefault(); // Prevent scrolling while dragging
+                    }, { passive: false });
+                    
+                    moveBtn.addEventListener('touchmove', function(e) {
+                        if (currentTouchItem) {
+                            e.preventDefault(); // Prevent scrolling while dragging
+                            
+                            const touchY = e.touches[0].clientY;
+                            const deltaY = touchY - touchStartY;
+                            
+                            // Move the dragged item
+                            currentTouchItem.style.transform = `translateY(${deltaY}px)`;
+                            
+                            // Calculate position and swap items if needed
+                            const currentIndex = taskElements.indexOf(currentTouchItem);
+                            let newIndex = currentIndex;
+                            
+                            // Determine if we should move up or down
+                            if (deltaY < -itemHeight/2 && currentIndex > 0) {
+                                // Move up
+                                newIndex = currentIndex - 1;
+                            } else if (deltaY > itemHeight/2 && currentIndex < taskElements.length - 1) {
+                                // Move down
+                                newIndex = currentIndex + 1;
+                            }
+                            
+                            // If position changed, swap elements
+                            if (newIndex !== currentIndex) {
+                                // Update the tasks array
+                                const temp = tasks[currentIndex];
+                                tasks[currentIndex] = tasks[newIndex];
+                                tasks[newIndex] = temp;
+                                
+                                // Reset touch params for new position
+                                touchStartY = touchY;
+                                currentTouchItem.style.transform = 'translateY(0)';
+                                
+                                // Re-render tasks to reflect new order
+                                saveTasks();
+                                renderTasks();
+                                
+                                // Reattach to the new item at the new position
+                                currentTouchItem = taskElements[newIndex];
+                                currentTouchItem.style.transition = 'none';
+                                currentTouchItem.style.zIndex = '1000';
+                                currentTouchItem.style.opacity = '0.8';
+                            }
+                        }
+                    }, { passive: false });
+                    
+                    moveBtn.addEventListener('touchend', function() {
+                        if (currentTouchItem) {
+                            currentTouchItem.style.transition = '';
+                            currentTouchItem.style.transform = 'translateY(0)';
+                            currentTouchItem.style.zIndex = '';
+                            currentTouchItem.style.opacity = '1';
+                            currentTouchItem = null;
+                            
+                            // Save order
+                            saveTasks();
+                        }
+                    });
+                    
+                    moveBtn.addEventListener('touchcancel', function() {
+                        if (currentTouchItem) {
+                            currentTouchItem.style.transition = '';
+                            currentTouchItem.style.transform = 'translateY(0)';
+                            currentTouchItem.style.zIndex = '';
+                            currentTouchItem.style.opacity = '1';
+                            currentTouchItem = null;
+                        }
                     });
                 });
             }
             
-            // Handle drag and drop reordering
+            // Handle desktop drag and drop reordering
             taskList.addEventListener('dragover', e => {
                 e.preventDefault();
                 const afterElement = getDragAfterElement(taskList, e.clientY);
