@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo App with Notifications</title>
+    <title>Todo App with Time Tracking</title>
     <style>
         * {
             margin: 0;
@@ -78,18 +78,6 @@
             flex-wrap: wrap;
         }
         
-        .notification-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-top: 8px;
-        }
-        
-        .notification-checkbox {
-            width: 16px;
-            height: 16px;
-        }
-        
         .deadline-label {
             font-size: 14px;
             color: #555;
@@ -110,23 +98,6 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
-        }
-        
-        .notification-toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .notification-badge {
-            display: inline-flex;
-            align-items: center;
-            background-color: #2196F3;
-            color: white;
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 8px;
         }
         
         .task-list {
@@ -256,10 +227,6 @@
             color: #888;
         }
         
-        .btn-notification {
-            color: #ffc107;
-        }
-        
         .deadline-edit-container {
             display: flex;
             flex-direction: column;
@@ -289,41 +256,6 @@
             color: #777;
             line-height: 1.5;
         }
-
-        .notification-banner {
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 12px;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        
-        .notification-banner-text {
-            flex: 1;
-            font-size: 14px;
-            color: #555;
-        }
-        
-        .notification-banner-button {
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 6px 12px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        .notification-banner-button:hover {
-            background-color: #0b7dda;
-        }
-        
-        .hidden {
-            display: none;
-        }
         
         /* Mobile optimizations */
         @media (max-width: 480px) {
@@ -349,13 +281,6 @@
     <div class="container">
         <h1>Todo List</h1>
         
-        <div id="notification-banner" class="notification-banner hidden">
-            <div class="notification-banner-text">
-                Enable notifications to get reminders for your tasks
-            </div>
-            <button id="enable-notifications" class="notification-banner-button">Enable Notifications</button>
-        </div>
-        
         <div class="input-container">
             <div class="input-row">
                 <input type="text" id="task-input" placeholder="Add a new task...">
@@ -366,12 +291,6 @@
                 <input type="date" id="deadline-date">
                 <input type="time" id="deadline-time">
             </div>
-            <div class="notification-row">
-                <label class="notification-toggle">
-                    <input type="checkbox" id="notification-checkbox" class="notification-checkbox">
-                    <span class="deadline-label">Send notification when due</span>
-                </label>
-            </div>
         </div>
         
         <ul id="task-list" class="task-list"></ul>
@@ -379,8 +298,7 @@
         <p class="info">
             On desktop: Drag and drop to reorder tasks.<br>
             On mobile: Use the ≡ handle to reorder tasks.<br>
-            Click the pencil icon to edit or add a deadline.<br>
-            Enable notifications to get reminders when tasks are due.
+            Click the pencil icon to edit or add a deadline.
         </p>
     </div>
     
@@ -389,14 +307,9 @@
             const taskInput = document.getElementById('task-input');
             const deadlineDate = document.getElementById('deadline-date');
             const deadlineTime = document.getElementById('deadline-time');
-            const notificationCheckbox = document.getElementById('notification-checkbox');
             const addTaskBtn = document.getElementById('add-task-btn');
             const taskList = document.getElementById('task-list');
-            const notificationBanner = document.getElementById('notification-banner');
-            const enableNotificationsBtn = document.getElementById('enable-notifications');
-            
             let tasks = [];
-            let notificationsEnabled = false;
             
             // For desktop drag and drop
             let draggedItem = null;
@@ -407,81 +320,6 @@
             let currentTouchItem = null;
             let itemHeight = 0;
             let taskElements = [];
-            
-            // Check for notification permission
-            function checkNotificationPermission() {
-                if (!('Notification' in window)) {
-                    console.log('This browser does not support notifications');
-                    return;
-                }
-                
-                if (Notification.permission === 'granted') {
-                    notificationsEnabled = true;
-                    notificationBanner.classList.add('hidden');
-                } else if (Notification.permission !== 'denied') {
-                    notificationBanner.classList.remove('hidden');
-                }
-            }
-            
-            // Request notification permission
-            function requestNotificationPermission() {
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        notificationsEnabled = true;
-                        notificationBanner.classList.add('hidden');
-                        
-                        // Show a test notification
-                        new Notification('Todo App Notifications Enabled', {
-                            body: 'You will now receive notifications for your tasks',
-                            icon: 'https://cdn-icons-png.flaticon.com/512/2098/2098402.png'
-                        });
-                    }
-                });
-            }
-            
-            // Send notification
-            function sendNotification(task) {
-                if (!notificationsEnabled || Notification.permission !== 'granted') {
-                    return;
-                }
-                
-                const notification = new Notification('Task Due: ' + task.text, {
-                    body: 'This task is now due',
-                    icon: 'https://cdn-icons-png.flaticon.com/512/2098/2098402.png'
-                });
-                
-                notification.onclick = function() {
-                    window.focus();
-                };
-            }
-            
-            // Register task for notification
-            function scheduleNotification(task) {
-                if (!task.deadline || !task.notifyOnDue || task.completed) {
-                    return;
-                }
-                
-                const now = new Date();
-                const deadline = new Date(task.deadline);
-                
-                // If the deadline is in the future, schedule notification
-                if (deadline > now) {
-                    const timeUntilDue = deadline.getTime() - now.getTime();
-                    
-                    // Check if a notification ID already exists and clear it
-                    if (task.notificationId) {
-                        clearTimeout(task.notificationId);
-                    }
-                    
-                    // Schedule new notification
-                    const notificationId = setTimeout(() => {
-                        sendNotification(task);
-                    }, timeUntilDue);
-                    
-                    // Store timeout ID with the task
-                    task.notificationId = notificationId;
-                }
-            }
             
             // Format date for display
             function formatDate(date) {
@@ -551,14 +389,6 @@
                 const savedTasks = localStorage.getItem('todos');
                 if (savedTasks) {
                     tasks = JSON.parse(savedTasks);
-                    
-                    // Schedule notifications for all tasks with deadlines
-                    tasks.forEach(task => {
-                        if (task.notifyOnDue && task.deadline && !task.completed) {
-                            scheduleNotification(task);
-                        }
-                    });
-                    
                     renderTasks();
                 }
                 
@@ -602,43 +432,25 @@
                 }
                 
                 const now = new Date();
-                const notifyOnDue = notificationCheckbox.checked;
                 
-                const newTask = {
+                tasks.push({
                     id: Date.now().toString(),
                     text: taskText,
                     completed: false,
                     created: now.toISOString(),
                     deadline: deadline,
-                    isOverdue: deadline ? now > new Date(deadline) : false,
-                    notifyOnDue: notifyOnDue
-                };
-                
-                tasks.push(newTask);
+                    isOverdue: deadline ? now > new Date(deadline) : false
+                });
                 
                 taskInput.value = '';
                 deadlineDate.value = '';
                 deadlineTime.value = '';
-                notificationCheckbox.checked = false;
-                
                 saveTasks();
-                
-                // Schedule notification if needed
-                if (notifyOnDue && deadline) {
-                    scheduleNotification(newTask);
-                }
-                
                 renderTasks();
             }
             
             // Delete a task
             function deleteTask(id) {
-                // Clear any scheduled notifications
-                const taskToDelete = tasks.find(task => task.id === id);
-                if (taskToDelete && taskToDelete.notificationId) {
-                    clearTimeout(taskToDelete.notificationId);
-                }
-                
                 tasks = tasks.filter(task => task.id !== id);
                 saveTasks();
                 renderTasks();
@@ -649,16 +461,6 @@
                 tasks = tasks.map(task => {
                     if (task.id === id) {
                         const completed = !task.completed;
-                        
-                        // If completed, clear notification
-                        if (completed && task.notificationId) {
-                            clearTimeout(task.notificationId);
-                            task.notificationId = null;
-                        } else if (!completed && task.notifyOnDue && task.deadline) {
-                            // If uncompleted and has deadline, reschedule
-                            scheduleNotification(task);
-                        }
-                        
                         return { 
                             ...task, 
                             completed,
@@ -673,28 +475,14 @@
             }
             
             // Edit task deadline
-            function editTaskDeadline(id, deadline, notifyOnDue) {
+            function editTaskDeadline(id, deadline) {
                 tasks = tasks.map(task => {
                     if (task.id === id) {
-                        // Clear previous notification if any
-                        if (task.notificationId) {
-                            clearTimeout(task.notificationId);
-                            task.notificationId = null;
-                        }
-                        
-                        const updatedTask = { 
+                        return { 
                             ...task, 
                             deadline,
-                            notifyOnDue,
                             isOverdue: deadline ? new Date() > new Date(deadline) : false
                         };
-                        
-                        // Schedule new notification if needed
-                        if (notifyOnDue && deadline && !updatedTask.completed) {
-                            scheduleNotification(updatedTask);
-                        }
-                        
-                        return updatedTask;
                     }
                     return task;
                 });
@@ -734,21 +522,6 @@
                     timeInput.value = formatTimeForInput(task.deadline);
                 }
                 
-                const notificationRow = document.createElement('div');
-                notificationRow.className = 'notification-row';
-                
-                const notificationLabel = document.createElement('label');
-                notificationLabel.className = 'notification-toggle';
-                
-                const notificationCheckboxEdit = document.createElement('input');
-                notificationCheckboxEdit.type = 'checkbox';
-                notificationCheckboxEdit.className = 'notification-checkbox';
-                notificationCheckboxEdit.checked = task.notifyOnDue || false;
-                
-                const notificationText = document.createElement('span');
-                notificationText.className = 'deadline-label';
-                notificationText.textContent = 'Send notification when due';
-                
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'deadline-edit-actions';
                 
@@ -766,15 +539,10 @@
                 editorRow.appendChild(dateInput);
                 editorRow.appendChild(timeInput);
                 
-                notificationLabel.appendChild(notificationCheckboxEdit);
-                notificationLabel.appendChild(notificationText);
-                notificationRow.appendChild(notificationLabel);
-                
                 actionsDiv.appendChild(cancelBtn);
                 actionsDiv.appendChild(saveBtn);
                 
                 deadlineEditor.appendChild(editorRow);
-                deadlineEditor.appendChild(notificationRow);
                 deadlineEditor.appendChild(actionsDiv);
                 
                 taskItem.appendChild(deadlineEditor);
@@ -788,7 +556,7 @@
                         deadline = `${dateValue}T${timeValue}`;
                     }
                     
-                    editTaskDeadline(task.id, deadline, notificationCheckboxEdit.checked);
+                    editTaskDeadline(task.id, deadline);
                 });
                 
                 cancelBtn.addEventListener('click', () => {
@@ -847,14 +615,7 @@
                     if (task.deadline) {
                         taskDeadline = document.createElement('span');
                         taskDeadline.className = 'task-deadline';
-                        let deadlineText = `<span>Due: ${formatDate(task.deadline)}</span>`;
-                        
-                        // Add notification icon if enabled
-                        if (task.notifyOnDue) {
-                            deadlineText += `<span class="notification-badge">🔔</span>`;
-                        }
-                        
-                        taskDeadline.innerHTML = deadlineText;
+                        taskDeadline.innerHTML = `<span>Due: ${formatDate(task.deadline)}</span>`;
                     }
                     
                     // Overdue time (if applicable)
@@ -956,4 +717,125 @@
                     
                     moveBtn.addEventListener('touchmove', function(e) {
                         if (currentTouchItem) {
-                            e.preventDefault(); //
+                            e.preventDefault(); // Prevent scrolling while dragging
+                            
+                            const touchY = e.touches[0].clientY;
+                            const deltaY = touchY - touchStartY;
+                            
+                            // Move the dragged item
+                            currentTouchItem.style.transform = `translateY(${deltaY}px)`;
+                            
+                            // Calculate position and swap items if needed
+                            const currentIndex = taskElements.indexOf(currentTouchItem);
+                            let newIndex = currentIndex;
+                            
+                            // Determine if we should move up or down
+                            if (deltaY < -itemHeight/2 && currentIndex > 0) {
+                                // Move up
+                                newIndex = currentIndex - 1;
+                            } else if (deltaY > itemHeight/2 && currentIndex < taskElements.length - 1) {
+                                // Move down
+                                newIndex = currentIndex + 1;
+                            }
+                            
+                            // If position changed, swap elements
+                            if (newIndex !== currentIndex) {
+                                // Update the tasks array
+                                const temp = tasks[currentIndex];
+                                tasks[currentIndex] = tasks[newIndex];
+                                tasks[newIndex] = temp;
+                                
+                                // Reset touch params for new position
+                                touchStartY = touchY;
+                                currentTouchItem.style.transform = 'translateY(0)';
+                                
+                                // Re-render tasks to reflect new order
+                                saveTasks();
+                                renderTasks();
+                                
+                                // Reattach to the new item at the new position
+                                currentTouchItem = taskElements[newIndex];
+                                currentTouchItem.style.transition = 'none';
+                                currentTouchItem.style.zIndex = '1000';
+                                currentTouchItem.style.opacity = '0.8';
+                            }
+                        }
+                    }, { passive: false });
+                    
+                    moveBtn.addEventListener('touchend', function() {
+                        if (currentTouchItem) {
+                            currentTouchItem.style.transition = '';
+                            currentTouchItem.style.transform = 'translateY(0)';
+                            currentTouchItem.style.zIndex = '';
+                            currentTouchItem.style.opacity = '1';
+                            currentTouchItem = null;
+                            
+                            // Save order
+                            saveTasks();
+                        }
+                    });
+                    
+                    moveBtn.addEventListener('touchcancel', function() {
+                        if (currentTouchItem) {
+                            currentTouchItem.style.transition = '';
+                            currentTouchItem.style.transform = 'translateY(0)';
+                            currentTouchItem.style.zIndex = '';
+                            currentTouchItem.style.opacity = '1';
+                            currentTouchItem = null;
+                        }
+                    });
+                });
+            }
+            
+            // Handle desktop drag and drop reordering
+            taskList.addEventListener('dragover', e => {
+                e.preventDefault();
+                const afterElement = getDragAfterElement(taskList, e.clientY);
+                if (draggedItem) {
+                    if (afterElement) {
+                        taskList.insertBefore(draggedItem, afterElement);
+                    } else {
+                        taskList.appendChild(draggedItem);
+                    }
+                    
+                    // Update tasks array order
+                    const newTasksOrder = Array.from(taskList.querySelectorAll('.task-item')).map(item => {
+                        const taskId = item.getAttribute('data-id');
+                        return tasks.find(task => task.id === taskId);
+                    });
+                    
+                    tasks = newTasksOrder;
+                    saveTasks();
+                }
+            });
+            
+            function getDragAfterElement(container, y) {
+                const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')];
+                
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
+            
+            // Event listeners
+            addTaskBtn.addEventListener('click', addTask);
+            
+            taskInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    addTask();
+                }
+            });
+            
+            // Initial load
+            loadTasks();
+        });
+    </script>
+</body>
+</html>
